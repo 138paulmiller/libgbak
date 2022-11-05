@@ -1,0 +1,13 @@
+# install devkitpro
+if [ -z "$DEVKITPRO" ]; then
+    #install gba-dev devkitpro
+    wget https://apt.devkitpro.org/install-devkitpro-pacman
+    chmod +x ./install-devkitpro-pacman
+	sudo ./install-devkitpro-pacman
+    rm install-devkitpro-pacman
+   	sudo dkp-pacman -S gba-dev
+	
+	# set env vars
+	sudo echo -e "export DEVKITPRO=/opt/devkitpro\n" >> ~/.bashrc
+	sudo echo -e "export DEVKITARM=/opt/devkitpro/devkitARM\n" >> ~/.bashrc
+fi
