@@ -6,7 +6,7 @@ $(error "Please set DEVKITPRO in your environment. export DEVKITPRO=<path to>dev
 endif
 
 PROJ  :=  $(shell basename $(CURDIR))
-TARGET  :=  $(CURDIR)/$(PROJ).a
+TARGET  :=  $(CURDIR)/$(PROJ)
 
 OBJDIR := obj
 SRCS := gbak.c 
@@ -28,15 +28,14 @@ PATH := $(DEVKITPRO)/tools/bin:$(PATH)
 
 .PHONY : all clean assets
 
-all: $(TARGET)
-	@echo $(SRCS)
+all: $(TARGET).a
 
 clean : 
-	@rm -rf $(OBJDIR)
-	@rm $(TARGET)
+	@-rm -rf $(OBJDIR)
+	@-rm $(TARGET).a
 
 # Link into an ELF file
-$(TARGET) : $(OBJS)
+$(TARGET).a : $(OBJS)
 	$(AR) $(ARFLAGS) $@ $^ 
 
 # Compile objects
