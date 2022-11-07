@@ -1,7 +1,5 @@
 #include "gbak.h"
 
-// See: http://problemkaputt.de/gbatek-lcd-obj-oam-attributes.htm
-
 // sprite image mapping 2D maps char block as 2D 8x8 tiles as image 
 #define SPRITE_MAP_2D 0x0
 
@@ -207,9 +205,13 @@ volatile ushort* sprite_obj_block = (volatile ushort*) 0x7000000;
 /*
     Buffer addresses to be used when double-buffering is enabled (MODE4)
 */
-volatile unsigned short* active_buffer = (volatile unsigned short*)  0x6000000;
-volatile unsigned short* front_buffer = (volatile unsigned short*)  0x6000000;
-volatile unsigned short* back_buffer = (volatile unsigned short*)  0x600A000;
+volatile ushort* active_buffer = (volatile ushort*) 0x06000000;
+volatile ushort* front_buffer = (volatile ushort*)  0x06000000;
+volatile ushort* back_buffer = (volatile ushort*)   0x0600A000;
+
+// The color palette used in graphics Mode 4
+volatile ushort* palette = (volatile ushort*) 0x5000000;
+uchar palette_count = 0; 
 
 // ----------------------------- End Pixel Mode ---------------------------------//
 
@@ -239,19 +241,23 @@ Size - the amount of data to be transfered
 */
 
 // flag enables DMA when written to DMA control register 
-#define DMA_ENABLE 0x80000000
+#define DMA_ENABLE       0x80000000
+#define DMA_SRC_FIXED    0x01000000
+#define DMA_AT_REFRESH   0x30000000
+#define DMA_AT_VBLANK   0x10000000
+#define DMA_AT_HBLANK   0x20000000
 
 // DMA transfer size flags
 #define DMA_16 0x00000000
 #define DMA_32 0x04000000
 
-volatile uint* dma_control = ( uint*) 0x40000DC;
+volatile uint* dma_control = (volatile uint*) 0x40000DC;
 
 // DMA register for address of data's source location 
-volatile uint* dma_src = ( uint*) 0x40000D4;
+volatile uint* dma_src = (volatile uint*) 0x40000D4;
 
 // DMA register for address of data's destination 
-volatile uint* dma_dest = ( uint*) 0x40000D8;
+volatile uint* dma_dest = (volatile uint*) 0x40000D8;
 
 //------------------------------  End DMA  ------------------------------------// 
 // ------------------------------ Begin Timer --------------------------------//
@@ -284,6 +290,12 @@ void gba_init(struct gba_config config)
         case 2:
             *display_control = GBA_MODE2;
             break;
+        case 3:
+            *display_control = GBA_MODE3 | BG_ENABLE_2;
+            return;
+        case 4:
+            *display_control = GBA_MODE4 | BG_ENABLE_2;
+            return;
     }
 
     switch(config.num_bgs)
@@ -394,34 +406,67 @@ uchar gba_button_state(ushort button)
 	//return not zero if 0
     return !(*buttons & button);
 }
-
 /*
  16-bit int color is bgr ranged 0-32 (5 bits each color)
     bbbbbgggggrrrrr 
 */
-#define RGB2PIXEL(r, g, b) ((b&0x1f) << 10) | ((g & 0x1f)<<5) | (r & 0x1f);
+#define RGB2PIXEL(_r, _g, _b) ((_b & 0x1f) << 10) | ((_g & 0x1f) << 5) | (_r & 0x1f)
 
-//TODO:
-void gba_put_pixel(int x, int y, uchar r, uchar g, uchar b) 
+inline void gba_pixel(int x, int y, uchar r, uchar g, uchar b) 
 {
-    //if(using palette)
-    //{
-    ////find the offset which is the regular offset divided by two */
-    //unsigned short offset = (row * WIDTH + col) >> 1;
-    //unsigned short pixel = buffer[offset];
-    ///* if it's an odd column */
-    //if (col & 1) {
-    //    buffer[offset] = ((RGB2PIXEL(r,g,b)) << 8) | (pixel & 0x00ff);
-    //} else {
-    //    buffer[offset] = (pixel & 0xff00) | RGB2PIXEL(r,g,b);
-    //}
-    //}
 	active_buffer[y * GBA_SCREEN_WIDTH + x] = RGB2PIXEL(r,g,b);
 }
 
-//TODO:
-void gba_swap_buffer() 
+inline void gba_clear_palette()
 {
+    palette_count = 0;
+    for(ushort i = 0; i < GBA_PALETTE_COUNT; ++i)
+    {
+        palette[i] = 0;
+    }
+}
+
+inline uchar gba_add_color(uchar r, uchar g, uchar b) 
+{
+    ushort color = RGB2PIXEL(r,g,b);
+
+    palette[palette_count] = color;
+    palette_count++;
+    return palette_count - 1;
+}
+
+inline void gba_clear_screen(uchar color_index)
+{
+    const ushort pixel = (color_index & 0x00ff) | (color_index << 8);
+    gba_vram_fill16((ushort*)active_buffer, pixel, GBA_SCREEN_SIZE >> 1);
+    *dma_control |= DMA_AT_REFRESH;
+}
+
+inline void gba_set_color(int x, int y, uchar color_index)
+{
+    //find the pixel index which is the regular index divided by two */
+    const ushort index = ((y * GBA_SCREEN_WIDTH + x) >> 1);
+    ushort pixel = active_buffer[index];
+    // Join the pixels by column
+    if (x & 1) //is odd 
+    {
+        active_buffer[index] = (color_index << 8) | (pixel & 0x00ff);
+    } 
+    else 
+    {
+        active_buffer[index] = (pixel & 0xff00) | color_index;
+    }
+    return;
+}
+
+inline uchar gba_color_count()
+{
+    return palette_count;
+}
+
+inline void gba_refresh_screen() 
+{
+    //Swap buffers
     if(active_buffer == front_buffer) 
     {
         // clear back buffer bit and return back buffer pointer */
@@ -435,6 +480,33 @@ void gba_swap_buffer()
     active_buffer = front_buffer;
 }
 
+inline void gba_draw_rect(uchar x, uchar y, uchar w, uchar h, uchar color_index) 
+{
+    uchar cx,cy;
+	const uchar cx_end = x + w;
+    const uchar cy_end = y + h; 
+    for (cy = y; cy < cy_end; cy++) 
+	{
+        for (cx = x; cx < cx_end; cx++) 
+        {
+            switch(cx % 10)
+            {
+                case 9: gba_set_color(cx++, cy, color_index);
+                case 8: gba_set_color(cx++, cy, color_index);
+                case 7: gba_set_color(cx++, cy, color_index);
+                case 6: gba_set_color(cx++, cy, color_index);
+                case 5: gba_set_color(cx++, cy, color_index);
+                case 4: gba_set_color(cx++, cy, color_index);
+                case 3: gba_set_color(cx++, cy, color_index);
+                case 2: gba_set_color(cx++, cy, color_index);
+                case 1: gba_set_color(cx++, cy, color_index);
+                case 0: gba_set_color(cx, cy, color_index);
+            }
+        }
+    }
+}
+
+// ---------------------------- Tile Mode ------------------------------------
 void gba_bg_init(uchar bg_index, uint char_block_n, uint screen_block_n,
 							ushort size, ushort priority, ushort wrap)
 {
@@ -461,7 +533,7 @@ void gba_bg_init(uchar bg_index, uint char_block_n, uint screen_block_n,
 
 void gba_bg_palette(const ushort* palette_data)
 {
-  	gba_dma16_copy((ushort*)bg_palette, palette_data, GBA_PALETTE_COUNT);
+  	gba_copy16((ushort*)bg_palette, palette_data, GBA_PALETTE_COUNT);
 }
 
 // Load background image data into char block n
@@ -469,14 +541,14 @@ void gba_bg_image(uint char_block_n, const uchar* image_data, uint width, uint h
 {
     ushort* char_block = gba_char_block(char_block_n);
     //divide by 2, Since we are transfer bytes, but the dma expects 16 bit values, we are counting 2 chars per short
-	gba_dma16_copy(char_block, (ushort*)image_data, (width * height) / 2);
+	gba_copy16(char_block, (ushort*)image_data, (width * height) / 2);
 }
 
 // Load background image data into char block n
 void gba_bg_tilemap(uint screen_block_n, const ushort* tilemap_data, uint width, uint height)
 {
 	//load tilemap data directly into nth screen block
-	gba_dma16_copy(gba_screen_block(screen_block_n), tilemap_data, width * height);
+	gba_copy16(gba_screen_block(screen_block_n), tilemap_data, width * height);
 }
 
 void gba_bg_scroll(int bg_index, int offset_x, int offset_y)
@@ -500,19 +572,19 @@ void gba_bg_scroll(int bg_index, int offset_x, int offset_y)
 
 void gba_obj_palette(const ushort* palette_data)
 {
-    gba_dma16_copy((ushort*)sprite_palette, palette_data, GBA_PALETTE_COUNT);
+    gba_copy16((ushort*)sprite_palette, palette_data, GBA_PALETTE_COUNT);
 }
 
 void gba_obj_img(const uchar* image_data, uint width, uint height)
 {
     //divide by 2, Since we are transfer bytes, but the dma expects 16 bit values, we are counting 2 chars per short
     const uint count = (width * height) / 2; 
-    gba_dma16_copy((ushort*)sprite_image_block, (ushort*)image_data, count);
+    gba_copy16((ushort*)sprite_image_block, (ushort*)image_data, count);
 }
 
 void gba_obj(const ushort* obj_data, uint size)
 {
-    gba_dma16_copy((ushort*) sprite_obj_block, obj_data, size);
+    gba_copy16((ushort*) sprite_obj_block, obj_data, size);
 }
 
 // Returns base address of nth character block (0-3)	
@@ -543,16 +615,64 @@ unsigned long gba_screen_block_offset(ushort* block)
 	return (unsigned long)(block - vram)/0x800;
 }
 
-void gba_dma16_copy(ushort* dest, const ushort* source, int size) 
+void gba_copy16(ushort* dest, const ushort* source, ushort size) 
 {
     *dma_src = (uint) source;
     *dma_dest = (uint) dest;
     *dma_control = size | DMA_16 | DMA_ENABLE;
 }
 
-void gba_dma32_copy(uint* dest, const uint* source, int size) 
+void gba_copy32(uint* dest, const uint* source, ushort size) 
 {
     *dma_src = (uint) source;
     *dma_dest = (uint) dest;
     *dma_control = size | DMA_32 | DMA_ENABLE;
+}
+
+void gba_fill16(ushort* dest, const ushort* source, ushort count)
+{
+    *dma_src = (uint) source;
+    *dma_dest = (uint) dest;
+    *dma_control = count | DMA_16 | DMA_ENABLE | DMA_SRC_FIXED;  
+}
+
+void gba_fill32(uint* dest, const uint* source, ushort count)
+{
+    *dma_src = (uint) source;
+    *dma_dest = (uint) dest;
+    *dma_control = count | DMA_32 | DMA_ENABLE | DMA_SRC_FIXED;
+}
+
+void gba_vram_copy16(ushort* dest, const ushort* source, ushort size) 
+{
+    *dma_src = (uint) source;
+    *dma_dest = (uint) dest;
+    *dma_control = size | DMA_16 | DMA_ENABLE | DMA_AT_REFRESH;
+}
+
+void gba_vram_copy32(uint* dest, const uint* source, ushort size) 
+{
+    *dma_src = (uint) source;
+    *dma_dest = (uint) dest;
+    *dma_control = size | DMA_32 | DMA_ENABLE | DMA_AT_REFRESH;
+}
+
+ushort pending_source16;
+void gba_vram_fill16(ushort* dest, const ushort source, ushort count)
+{
+    pending_source16 = source;
+    *dma_src = (uint)((ushort*)&pending_source16);
+    *dma_dest = (uint)(dest);
+    *dma_control = (count) | DMA_16 | DMA_ENABLE | DMA_SRC_FIXED;
+    *dma_control |= DMA_AT_REFRESH;
+}
+
+uint pending_source32;
+void gba_vram_fill32(uint* dest, const uint source, ushort count)
+{
+    pending_source32 = source;
+    *dma_src = (uint)((ushort*)&pending_source32);
+    *dma_dest = (uint)(dest);
+    *dma_control = (count) | DMA_32 | DMA_ENABLE | DMA_SRC_FIXED;
+    *dma_control |= DMA_AT_REFRESH;
 }

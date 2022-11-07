@@ -52,6 +52,7 @@ Display Modes
 //Screen size
 #define GBA_SCREEN_WIDTH 240
 #define GBA_SCREEN_HEIGHT 160
+#define GBA_SCREEN_SIZE GBA_SCREEN_HEIGHT * GBA_SCREEN_WIDTH
 
 //Images in memory are represented as 8x8 tiles 
 #define GBA_TILE_WIDTH 8
@@ -77,12 +78,20 @@ void gba_wait(uint sec);
 // Checks whether a particular button has been pressed. Returns 0 if not
 uchar gba_button_state(ushort button);
 
-/*-------------------------Bitmap Mode --------------------------------------*/
+/*-------------------------Immediate Mode --------------------------------------*/
 
-void gba_put_pixel(int x, int y, uchar r, uchar g, uchar b);
+// Mode 3
+void gba_pixel(int x, int y, uchar r, uchar g, uchar b);
 
-// this function takes a video buffer and returns to you the other one */
-void gba_swap_buffer();
+// Mode 4 (Buffered screen. Prevent tearing)
+void gba_clear_palette();
+uchar gba_add_color(uchar r, uchar g, uchar b);
+void gba_set_color(int x, int y, uchar color_index);
+uchar gba_color_count();
+void gba_clear_screen(uchar color);
+void gba_refresh_screen();
+
+void gba_draw_rect(uchar x, uchar y, uchar w, uchar h, uchar  color_index); 
 
 /* ---------------------- Tiled Mode ------------------------------*/
 
@@ -119,8 +128,22 @@ ushort* gba_screen_block(unsigned long block_n);
 unsigned long gba_char_block_offset(ushort* block);
 unsigned long gba_screen_block_offset(ushort* block);
 
-// Copy data using DMA format
-void gba_dma16_copy(ushort* dest, const ushort* source, int size) ;
-void gba_dma32_copy(uint* dest, const uint* source, int size);
+// Copy arrays using GBA DMA hardware 
+void gba_copy16(ushort* dest, const ushort* source, ushort size) ;
+void gba_copy32(uint* dest, const uint* source, ushort size);
+
+// Fill array using GBA DMA hardware 
+void gba_fill16(ushort* dest, const ushort* source, ushort count);
+void gba_fill32(uint* dest, const uint* source, ushort count);
+
+// VRAM-safe Copy arrays using GBA DMA hardware 
+// note: will copy source on next vram refresh. So must ensure will not change until then
+void gba_vram_copy16(ushort* dest, const ushort* source, ushort size) ;
+void gba_vram_copy32(uint* dest, const uint* source, ushort size);
+
+// VRAM-safe Fill array using GBA DMA hardware 
+void gba_vram_fill16(ushort* dest, const ushort source, ushort count);
+void gba_vram_fill32(uint* dest, const uint source, ushort count);
+
 
 #endif //GBAK_H
