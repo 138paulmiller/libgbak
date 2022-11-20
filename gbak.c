@@ -82,7 +82,7 @@ Screen and Character blocks (memory representation of vram )
 	
     Note:
 	    - Screen and Character blocks are different ways to access chunks of VRAM,
-	    - If Char blocks 0 and 1 are used, screen blocks 16-31 are available
+	    - If Char blocks 0 and 1 are used (2 bgs), screen blocks 16-31 are available
 	
 	BLOCKS:
 	Char		Screen Blocks
