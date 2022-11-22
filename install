@@ -11,3 +11,5 @@ if [ -z "$DEVKITPRO" ]; then
 	sudo echo -e "export DEVKITPRO=/opt/devkitpro\n" >> ~/.bashrc
 	sudo echo -e "export DEVKITARM=/opt/devkitpro/devkitARM\n" >> ~/.bashrc
 fi
+
+sudo echo -e "export GBAK=$cwd\n" >> ~/.bashrc
