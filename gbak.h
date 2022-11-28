@@ -134,6 +134,7 @@ typedef enum gba_obj_size
     GBA_OBJ_32_64
 } gba_obj_size;
 #define GBA_OBJ_COUNT 128
+#define GBA_OBJ_INVALID -1
 
 //load the palette into the sprite palette memory block 
 void gba_obj_palette(const ushort* palette_data);
@@ -143,7 +144,7 @@ void gba_obj_image(const uchar* image_data, uint width, uint height);
 
 //load the sprite object data into the sprite object memory block 
 void gba_obj_data(const ushort* obj_data, uint size);
-uint gba_obj_new(gba_obj_size size, int priority);
+int gba_obj_new(gba_obj_size size, int priority);
 uchar gba_obj_width(uint object_index);
 void gba_obj_set_pos(uint object_index, int x, int y) ;
 void gba_obj_get_pos(uint object_index, int *x, int *y);

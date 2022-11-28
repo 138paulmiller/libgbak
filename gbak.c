@@ -592,48 +592,50 @@ shape	0	8x8		16x16	32x32	64x64
 		1	16x8	32x8	32x16	64x32
 		2	8x16	8x32	16x32	32x64
 */
-uint sprite_make_obj(gba_obj_size size, int priority)
+int gba_obj_new(gba_obj_size size, int priority)
 {
-	if(obj_attr_index < GBA_OBJ_COUNT)
-	{
-		uchar h_flip = 0, v_flip =0,  tile_offset =0;
-		uchar size_flag = 0, shape_flag = 0;
-    	switch (size) 
-		{
-	        case GBA_OBJ_8_8:   size_flag = 0; shape_flag = 0;  break;
-	        case GBA_OBJ_16_16: size_flag = 1; shape_flag = 0;  break;
-	        case GBA_OBJ_32_32: size_flag = 2; shape_flag = 0;  break;
-	        case GBA_OBJ_64_64: size_flag = 3; shape_flag = 0;  break;
-	        case GBA_OBJ_16_8:  size_flag = 0; shape_flag = 1;  break;
-	        case GBA_OBJ_32_8:  size_flag = 1; shape_flag = 1;  break;
-	        case GBA_OBJ_32_16: size_flag = 2; shape_flag = 1;  break;
-	        case GBA_OBJ_64_32: size_flag = 3; shape_flag = 1;  break;
-	        case GBA_OBJ_8_16:  size_flag = 0; shape_flag = 2;  break;
-	        case GBA_OBJ_8_32:  size_flag = 1; shape_flag = 2;  break;
-	        case GBA_OBJ_16_32: size_flag = 2; shape_flag = 2;  break;
-	        case GBA_OBJ_32_64: size_flag = 3; shape_flag = 2;  break;
-    	}
+    if(obj_attr_index >= GBA_OBJ_COUNT)
+    {
+        return GBA_OBJ_INVALID;
+    }
 
-		obj_attrs[obj_attr_index].attr0 =
-					 (0)                          //8 bits for y value
-				   	|(0 << 8)                     //affine
-				   	|(0 << 10)	                  //effect
-				   	|(0 << 12)                    //mosaic
-				  	|(GBA_COLOR_MODE << 13)           //color mode
-					|((shape_flag & 0x03) << 14); //mask 2 bits of shape
+    uchar h_flip = 0, v_flip =0,  tile_offset =0;
+    uchar size_flag = 0, shape_flag = 0;
+    switch (size) 
+    {
+        case GBA_OBJ_8_8:   size_flag = 0; shape_flag = 0;  break;
+        case GBA_OBJ_16_16: size_flag = 1; shape_flag = 0;  break;
+        case GBA_OBJ_32_32: size_flag = 2; shape_flag = 0;  break;
+        case GBA_OBJ_64_64: size_flag = 3; shape_flag = 0;  break;
+        case GBA_OBJ_16_8:  size_flag = 0; shape_flag = 1;  break;
+        case GBA_OBJ_32_8:  size_flag = 1; shape_flag = 1;  break;
+        case GBA_OBJ_32_16: size_flag = 2; shape_flag = 1;  break;
+        case GBA_OBJ_64_32: size_flag = 3; shape_flag = 1;  break;
+        case GBA_OBJ_8_16:  size_flag = 0; shape_flag = 2;  break;
+        case GBA_OBJ_8_32:  size_flag = 1; shape_flag = 2;  break;
+        case GBA_OBJ_16_32: size_flag = 2; shape_flag = 2;  break;
+        case GBA_OBJ_32_64: size_flag = 3; shape_flag = 2;  break;
+    }
 
-		obj_attrs[obj_attr_index].attr1 =
-     					  (0)                // 9 bits
-						| (0 << 9)           // not affine flag 
-                        | (h_flip << 12)     // horizontal flip flag 
-                        | (v_flip << 13)     // vertical flip flag 
-                        | ((size_flag& 0x03) << 14); // size 
+    obj_attrs[obj_attr_index].attr0 =
+                    (0)                          //8 bits for y value
+                |(0 << 8)                     //affine
+                |(0 << 10)	                  //effect
+                |(0 << 12)                    //mosaic
+                |(GBA_COLOR_MODE << 13)           //color mode
+                |((shape_flag & 0x03) << 14); //mask 2 bits of shape
 
-    	obj_attrs[obj_attr_index].attr2 =
-    				 	    tile_offset   // tile index 
-                         |   (priority << 10) //priority 
-                         |   (0 << 12);          // 16 color palette	
-	}
+    obj_attrs[obj_attr_index].attr1 =
+                        (0)                // 9 bits
+                    | (0 << 9)           // not affine flag 
+                    | (h_flip << 12)     // horizontal flip flag 
+                    | (v_flip << 13)     // vertical flip flag 
+                    | ((size_flag& 0x03) << 14); // size 
+
+    obj_attrs[obj_attr_index].attr2 =
+                        tile_offset   // tile index 
+                        |   (priority << 10) //priority 
+                        |   (0 << 12);          // 16 color palette	
 	//return sprite struct with the given sprite attributess
 	uint new_obj_attr_index = obj_attr_index;
     ++obj_attr_index;
@@ -649,7 +651,7 @@ inline obj_attr* gba_obj_at(uint obj_index)
     return 0;
 }
 
-uchar sprite_obj_width(uint obj_index)
+uchar gba_obj_width(uint obj_index)
 {
     obj_attr* obj = gba_obj_at(obj_index);
     if(obj == 0)
@@ -692,8 +694,6 @@ uchar sprite_obj_width(uint obj_index)
     }
     return width;
 }
-
-//------------------------------------ Sprite Utilities ------------------------------------------------------
 
 void gba_obj_set_pos(uint obj_index, int x, int y) 
 {
