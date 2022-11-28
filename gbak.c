@@ -68,35 +68,7 @@ Button state register
  */
 volatile ushort* buttons = (volatile ushort*) 0x04000130;
 
-/* ----------------------- Begin Tiled Mode ------------------------------------
-Screen and Character blocks (memory representation of vram ) 
-	1 block = 512 bytes
-	2 blocks = 1024 bytes = 1 kilobyte = 0x0400
-	- Screen blocks are 2 kb
-		VRAM contains 32 Screen Blocks
-	- Character blocks are 16 kb
-		VRAM contains 4 char Blocks
-	
-    Character Block are used to store background image data (tileset)
-	Screen Blocks are used to store map data (tilemap)
-	
-    Note:
-	    - Screen and Character blocks are different ways to access chunks of VRAM,
-	    - If Char blocks 0 and 1 are used (2 bgs), screen blocks 16-31 are available
-	
-	BLOCKS:
-	Char		Screen Blocks
-			----------------------------------------
-	0		| 0  | 1  | 2  | 3  | 4  | 5  | 6  | 7  |
-			---------------------------------------
-	1		| 8  | 9  | 10 | 11 | 12 | 13 | 14 | 15 |
-			----------------------------------------
-	2		| 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 |
-			----------------------------------------
-	3		| 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 |
-			----------------------------------------
-*/
-
+// ----------------------- Begin Tiled Mode ------------------------------------
 /*
 	Background control registers (2 bytes) - Write Only
 
@@ -196,7 +168,7 @@ OBJ Attribute 2 (Read/Write)
   12-15 Palette Number   (0-15) (Not used in 256 color/1 palette mode)
  
 */
-volatile ushort* sprite_obj_block = (volatile ushort*) 0x7000000;
+volatile ushort* obj_block = (volatile ushort*) 0x7000000;
 
 // ----------------------------- End Tiled Mode ---------------------------------//
 
@@ -575,17 +547,259 @@ void gba_obj_palette(const ushort* palette_data)
     gba_copy16((ushort*)sprite_palette, palette_data, GBA_PALETTE_COUNT);
 }
 
-void gba_obj_img(const uchar* image_data, uint width, uint height)
+void gba_obj_image(const uchar* image_data, uint width, uint height)
 {
     //divide by 2, Since we are transfer bytes, but the dma expects 16 bit values, we are counting 2 chars per short
     const uint count = (width * height) / 2; 
     gba_copy16((ushort*)sprite_image_block, (ushort*)image_data, count);
 }
 
-void gba_obj(const ushort* obj_data, uint size)
+typedef struct __attribute__((aligned (4))) obj_attr
 {
-    gba_copy16((ushort*) sprite_obj_block, obj_data, size);
+	/* Attribute 0
+	Bits	|15 14 |13		   |12		| 11 10	 |9 8	 | 7 6 5 4 3 2 1 0
+	Field	|Shape |Color Mode |Mosaic	| Effect |Affine | Y pos
+
+	Effect: alpha blending or masking. 
+	*/
+	ushort attr0;
+	/* Attribute 1
+	Bits	|15 14 |13		 |12		| 11 10	9 | 8 7 6 5 4 3 2 1 0
+	Field	|Size  |V Flip	 |H Flip	| ~	      | X pos
+	*/	
+	ushort attr1;
+
+	/* Attribute 2
+	Bits	|15 14 13 12| 11 10	  | 9  8 7 6 5 4 3 2 1 0
+	Field	|Palette 	| Priority| Tile Index (Frame pos ofset)
+	
+	*/	
+	ushort attr2;
+	/*
+	Fill not used
+	*/
+	ushort attr3;
+} obj_attr;
+
+//all possible obj attributes that can be loaded into memory at a time
+obj_attr obj_attrs[GBA_OBJ_COUNT];
+uint obj_attr_index = 0;
+
+
+/*				size
+			0		1		2		3
+shape	0	8x8		16x16	32x32	64x64
+		1	16x8	32x8	32x16	64x32
+		2	8x16	8x32	16x32	32x64
+*/
+uint sprite_make_obj(gba_obj_size size, int priority)
+{
+	if(obj_attr_index < GBA_OBJ_COUNT)
+	{
+		uchar h_flip = 0, v_flip =0,  tile_offset =0;
+		uchar size_flag = 0, shape_flag = 0;
+    	switch (size) 
+		{
+	        case GBA_OBJ_8_8:   size_flag = 0; shape_flag = 0;  break;
+	        case GBA_OBJ_16_16: size_flag = 1; shape_flag = 0;  break;
+	        case GBA_OBJ_32_32: size_flag = 2; shape_flag = 0;  break;
+	        case GBA_OBJ_64_64: size_flag = 3; shape_flag = 0;  break;
+	        case GBA_OBJ_16_8:  size_flag = 0; shape_flag = 1;  break;
+	        case GBA_OBJ_32_8:  size_flag = 1; shape_flag = 1;  break;
+	        case GBA_OBJ_32_16: size_flag = 2; shape_flag = 1;  break;
+	        case GBA_OBJ_64_32: size_flag = 3; shape_flag = 1;  break;
+	        case GBA_OBJ_8_16:  size_flag = 0; shape_flag = 2;  break;
+	        case GBA_OBJ_8_32:  size_flag = 1; shape_flag = 2;  break;
+	        case GBA_OBJ_16_32: size_flag = 2; shape_flag = 2;  break;
+	        case GBA_OBJ_32_64: size_flag = 3; shape_flag = 2;  break;
+    	}
+
+		obj_attrs[obj_attr_index].attr0 =
+					 (0)                          //8 bits for y value
+				   	|(0 << 8)                     //affine
+				   	|(0 << 10)	                  //effect
+				   	|(0 << 12)                    //mosaic
+				  	|(GBA_COLOR_MODE << 13)           //color mode
+					|((shape_flag & 0x03) << 14); //mask 2 bits of shape
+
+		obj_attrs[obj_attr_index].attr1 =
+     					  (0)                // 9 bits
+						| (0 << 9)           // not affine flag 
+                        | (h_flip << 12)     // horizontal flip flag 
+                        | (v_flip << 13)     // vertical flip flag 
+                        | ((size_flag& 0x03) << 14); // size 
+
+    	obj_attrs[obj_attr_index].attr2 =
+    				 	    tile_offset   // tile index 
+                         |   (priority << 10) //priority 
+                         |   (0 << 12);          // 16 color palette	
+	}
+	//return sprite struct with the given sprite attributess
+	uint new_obj_attr_index = obj_attr_index;
+    ++obj_attr_index;
+    return new_obj_attr_index;
 }
+
+inline obj_attr* gba_obj_at(uint obj_index)
+{
+    if(obj_index < GBA_OBJ_COUNT)
+    {
+	    return &obj_attrs[obj_index];
+    }
+    return 0;
+}
+
+uchar sprite_obj_width(uint obj_index)
+{
+    obj_attr* obj = gba_obj_at(obj_index);
+    if(obj == 0)
+    {
+        return 0;
+    }
+
+    int shape_flag = (obj->attr0 >> 14) & 0x03;
+    int size_flag = (obj->attr1 >> 14) & 0x03;
+    uchar width = 0;
+    switch(shape_flag)
+    {
+    case 0:
+        switch(size_flag)
+        {
+        case 0: width = 8; break;
+        case 1: width = 16; break;
+        case 2: width = 32; break;
+        case 4: width = 64; break;
+        }
+        break;
+    case 1:
+        switch(size_flag)
+        {
+        case 0: width = 16; break;
+        case 1: width = 32; break;
+        case 2: width = 32; break;
+        case 4: width = 64; break;
+        }
+        break;
+    case 2:
+        switch(size_flag)
+        {
+        case 0: width = 8; break;
+        case 1: width = 8; break;
+        case 2: width = 16; break;
+        case 4: width = 32; break;
+        }
+        break;
+    }
+    return width;
+}
+
+//------------------------------------ Sprite Utilities ------------------------------------------------------
+
+void gba_obj_set_pos(uint obj_index, int x, int y) 
+{
+    obj_attr* obj = gba_obj_at(obj_index);
+    if(obj == 0)
+    {
+        return;
+    }
+
+    // clear lower 8 bits of attr0
+    obj->attr0 &= 0xff00;
+    // set the new y pos in lower 8 bits by clearing the upper bits 8 of x
+    obj->attr0 |= ( y & 0xff);
+    // clear lower 9 bits of attr1
+    obj->attr1 &= 0xfe00;
+    // set the new x pos in lower 9 bits by clearing the upper bits 7 of x
+    obj->attr1 |= ( x & 0x1ff);
+}
+
+void gba_obj_get_pos(uint obj_index, int *x, int *y)
+{
+    obj_attr* obj = gba_obj_at(obj_index);
+    if(obj == 0)
+    {
+        return;
+    }
+	*x = obj->attr1 & 0x01ff;
+	*y = obj->attr0 & 0x00ff;
+}
+
+void gba_obj_set_offset(uint obj_index, int offset) 
+{
+    obj_attr* obj = gba_obj_at(obj_index);
+    if(obj == 0)
+    {
+        return;
+    }
+    /* clear the old offset */
+    obj->attr2 &= 0xfc00;
+    /* apply the new one */
+    obj->attr2 |= (offset & 0x03ff);
+}
+
+void gba_obj_move_by(uint obj_index, int dx, int dy) 
+{
+    //add by deltas
+    int x, y;
+    gba_obj_get_pos(obj_index, &x, &y);
+    x = (x + dx);
+    y = (y + dy);
+    gba_obj_set_pos(obj_index, x, y);
+}
+
+void gba_obj_snap(uint obj_index) 
+{
+    int x, y;
+    gba_obj_get_pos(obj_index, &x, &y);
+    x = x >> 8; // divide by eight to pixel position
+    y = y >> 8;
+    gba_obj_set_pos(obj_index, x, y);
+}
+
+void gba_obj_flip(uint obj_index, int h_flip, int v_flip)
+{
+    obj_attr* obj = gba_obj_at(obj_index);
+    if(obj == 0)
+    {
+        return;
+    }
+
+	//Attr1 | 0 0 V  H  |0 0 0 0 |0 0 0 0 |0 0 0 0
+	// 	H	| 1 1 1  0  |1 1 1 1 |1 1 1 1 |1 1 1 1 
+	// 	V	| 1 1 0  1  |1 1 1 1 |1 1 1 1 |1 1 1 1
+	if(v_flip)
+		obj->attr1 |=  0x2000; //set flags 
+	else
+		obj->attr1 &=  0xDFFF; //clear flags 
+	
+	if(h_flip)
+		obj->attr1 |=  0x1000; //set flags 
+	else
+		obj->attr1 &=  0xEFFF; //clear flags 
+}
+
+void gba_obj_reset_all() 
+{
+    /* clear the index counter */
+    obj_attr_index = 0;
+    /* move all sprites offscreen to hide them */
+    for(int i = 0; i < GBA_OBJ_COUNT; i++) 
+	{
+        obj_attrs[i].attr0 = (GBA_SCREEN_HEIGHT & 0xff);
+        obj_attrs[i].attr1 = (GBA_SCREEN_WIDTH & 0x1ff);
+        obj_attrs[i].attr2 = 0;
+    }
+    gba_obj_update_all();
+}
+
+void gba_obj_update_all() 
+{
+    static const int obj_attr_size = GBA_OBJ_COUNT * sizeof(obj_attr)/sizeof(short);
+    // load obj attrs into object block
+    gba_copy16((ushort*) obj_block, (ushort*)obj_attrs, obj_attr_size);
+}
+
+/* --------------------------------- Memory Utilities ----------------------------------------- */
 
 // Returns base address of nth character block (0-3)	
 ushort* gba_char_block(unsigned long block_n)

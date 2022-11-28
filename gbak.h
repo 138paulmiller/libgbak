@@ -78,7 +78,7 @@ void gba_wait(uint sec);
 // Checks whether a particular button has been pressed. Returns 0 if not
 uchar gba_button_state(ushort button);
 
-/*-------------------------Immediate Mode --------------------------------------*/
+/*-------------------------Immediate Modes (3 and 4) --------------------------------------*/
 
 // Mode 3
 void gba_pixel(int x, int y, uchar r, uchar g, uchar b);
@@ -90,10 +90,9 @@ void gba_set_color(int x, int y, uchar color_index);
 uchar gba_color_count();
 void gba_clear_screen(uchar color);
 void gba_refresh_screen();
-
 void gba_draw_rect(uchar x, uchar y, uchar w, uchar h, uchar  color_index); 
 
-/* ---------------------- Tiled Mode ------------------------------*/
+/* ---------------------- Tiled Background ------------------------------*/
 
 void gba_bg_init(uchar bg_index, uint char_block_n, uint screen_block_n, ushort size, ushort priority, ushort wrap);
 
@@ -111,18 +110,79 @@ void gba_bg_tilemap(uint screen_block_n, const ushort* tilemap_data, uint width,
 // Load background palette colors
 void gba_bg_scroll(int bg_index, int offset_x, int offset_y);
 
+/* ---------------------- Tiled Objects (Sprites) ------------------------------*/
+/*				size
+			0		1		2		3
+shape	0	8x8		16x16	32x32	64x64
+		1	16x8	32x8	32x16	64x32
+		2	8x16	8x32	16x32	32x64
+*/
+
+typedef enum gba_obj_size 
+{
+    GBA_OBJ_8_8,
+    GBA_OBJ_16_16,
+    GBA_OBJ_32_32,
+    GBA_OBJ_64_64,
+    GBA_OBJ_16_8,
+    GBA_OBJ_32_8,
+    GBA_OBJ_32_16,
+    GBA_OBJ_64_32,
+    GBA_OBJ_8_16,
+    GBA_OBJ_8_32,
+    GBA_OBJ_16_32,
+    GBA_OBJ_32_64
+} gba_obj_size;
+#define GBA_OBJ_COUNT 128
+
 //load the palette into the sprite palette memory block 
 void gba_obj_palette(const ushort* palette_data);
 
 //load the image into the sprite image memory block 
-void gba_obj_img(const uchar* image_data, uint width, uint height);
+void gba_obj_image(const uchar* image_data, uint width, uint height);
 
 //load the sprite object data into the sprite object memory block 
-void gba_obj(const ushort* obj_data, uint size);
+void gba_obj_data(const ushort* obj_data, uint size);
+uint gba_obj_new(gba_obj_size size, int priority);
+uchar gba_obj_width(uint object_index);
+void gba_obj_set_pos(uint object_index, int x, int y) ;
+void gba_obj_get_pos(uint object_index, int *x, int *y);
+void gba_obj_set_offset(uint object_index, int offset) ;
+void gba_obj_move_by(uint object_index, int dx, int dy) ;
+void gba_obj_flip(uint object_index, int h_flip, int v_flip);
+void gba_obj_reset_all();
+void gba_obj_update_all();
 
-/* ---------------------- Memory ------------------------------*/
+/* ---------------------- Memory and Utilities ------------------------------*/
 
-// Direct access to VRAM
+/* 
+Screen and Character blocks (memory representation of vram ) 
+	1 block = 512 bytes
+	2 blocks = 1024 bytes = 1 kilobyte = 0x0400
+	- Screen blocks are 2 kb
+		VRAM contains 32 Screen Blocks
+	- Character blocks are 16 kb
+		VRAM contains 4 char Blocks
+	
+    Character Block are used to store background image data (tileset)
+	Screen Blocks are used to store map data (tilemap)
+	
+    Note:
+	    - Screen and Character blocks are different ways to access chunks of VRAM,
+	    - If Char blocks 0 and 1 are used (2 bgs), screen blocks 16-31 are available
+	
+	BLOCKS:
+	Char		Screen Blocks
+			----------------------------------------
+	0		| 0  | 1  | 2  | 3  | 4  | 5  | 6  | 7  |
+			---------------------------------------
+	1		| 8  | 9  | 10 | 11 | 12 | 13 | 14 | 15 |
+			----------------------------------------
+	2		| 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 |
+			----------------------------------------
+	3		| 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 |
+			----------------------------------------
+*/
 ushort* gba_char_block(unsigned long block_n);
 ushort* gba_screen_block(unsigned long block_n);
 unsigned long gba_char_block_offset(ushort* block);
