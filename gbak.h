@@ -39,18 +39,18 @@ Display Modes
 #define GBA_BUTTON_R (1 << 8)
 #define GBA_BUTTON_L (1 << 9)
 
-#define GBA_OBJ_8_8   0x00
-#define GBA_OBJ_16_16 0x10
-#define GBA_OBJ_32_32 0x20
-#define GBA_OBJ_64_64 0x30
-#define GBA_OBJ_16_8  0x01
-#define GBA_OBJ_32_8  0x11
-#define GBA_OBJ_32_16 0x21
-#define GBA_OBJ_64_32 0x31
-#define GBA_OBJ_8_16  0x02
-#define GBA_OBJ_8_32  0x12
-#define GBA_OBJ_16_32 0x22
-#define GBA_OBJ_32_64 0x32
+#define GBA_OBJ_8x8   0x00
+#define GBA_OBJ_16x16 0x10
+#define GBA_OBJ_32x32 0x20
+#define GBA_OBJ_64x64 0x30
+#define GBA_OBJ_16x8  0x01
+#define GBA_OBJ_32x8  0x11
+#define GBA_OBJ_32x16 0x21
+#define GBA_OBJ_64x32 0x31
+#define GBA_OBJ_8x16  0x02
+#define GBA_OBJ_8x32  0x12
+#define GBA_OBJ_16x32 0x22
+#define GBA_OBJ_32x64 0x32
 
 // Max number of objects
 #define GBA_OBJ_COUNT 128
@@ -59,6 +59,22 @@ Display Modes
 
 // Max number of backgrounds
 #define GBA_BG_COUNT 4
+
+// Note priority is in reverse draw order 
+#define GBA_BG_PRIORITY_FIRST 3
+#define GBA_BG_PRIORITY_SECOND 2
+#define GBA_BG_PRIORITY_THIRD 1
+#define GBA_BG_PRIORITY_LAST 0
+
+// GB sizes
+#define GBA_BG_32x32 0 
+#define GBA_BG_64x32 1
+#define GBA_BG_32x64 2
+#define GBA_BG_64x64 3
+#define GBA_BG_16x16_AFFINE 0 
+#define GBA_BG_32x32_AFFINE 1
+#define GBA_BG_64x64_AFFINE 2
+#define GBA_BG_128x128_AFFINE 3
 
 // color palette mode
 #define GBA_COLOR_MODE 1 
