@@ -1,19 +1,20 @@
+// 138paulmiller libgbak
 #include "gbak.h"
-
-// sprite image mapping 2D maps char block as 2D 8x8 tiles as image 
-#define SPRITE_MAP_2D 0x0
-
-// Sprite map 1D reads row of 8x8 tiles in char block as image
-#define SPRITE_MAP_1D 0x40
-
-// Enable main display control to draw sprites
-#define SPRITE_ENABLE 0x1000
 
 // Enable the background at index N
 #define BG_ENABLE_0 0x100
 #define BG_ENABLE_1 0x200
 #define BG_ENABLE_2 0x400
 #define BG_ENABLE_3 0x800
+
+// Enable main display control to draw sprites
+#define SPRITE_ENABLE 0x1000
+
+// sprite image mapping 2D maps char block as 2D tiles as image 
+#define SPRITE_MAP_2D 0x0
+
+// Sprite map 1D reads row of tiles in char block as image
+#define SPRITE_MAP_1D 0x40
 
 #define MOSAIC_ENABLE 0
 
@@ -554,6 +555,7 @@ void gba_obj_image(const uchar* image_data, uint width, uint height)
     gba_copy16((ushort*)sprite_image_block, (ushort*)image_data, count);
 }
 
+// Data aligned structure for an individual object entry in the object ram 
 typedef struct __attribute__((aligned (4))) obj_attr
 {
 	/* Attribute 0
@@ -586,37 +588,22 @@ obj_attr obj_attrs[GBA_OBJ_COUNT];
 uint obj_attr_index = 0;
 
 
-/*				size
-			0		1		2		3
-shape	0	8x8		16x16	32x32	64x64
-		1	16x8	32x8	32x16	64x32
-		2	8x16	8x32	16x32	32x64
-*/
-int gba_obj_new(gba_obj_size size, int priority)
+int gba_obj_new(uchar size_flags, int priority)
 {
     if(obj_attr_index >= GBA_OBJ_COUNT)
     {
         return GBA_OBJ_INVALID;
     }
 
-    uchar h_flip = 0, v_flip =0,  tile_offset =0;
-    uchar size_flag = 0, shape_flag = 0;
-    switch (size) 
-    {
-        case GBA_OBJ_8_8:   size_flag = 0; shape_flag = 0;  break;
-        case GBA_OBJ_16_16: size_flag = 1; shape_flag = 0;  break;
-        case GBA_OBJ_32_32: size_flag = 2; shape_flag = 0;  break;
-        case GBA_OBJ_64_64: size_flag = 3; shape_flag = 0;  break;
-        case GBA_OBJ_16_8:  size_flag = 0; shape_flag = 1;  break;
-        case GBA_OBJ_32_8:  size_flag = 1; shape_flag = 1;  break;
-        case GBA_OBJ_32_16: size_flag = 2; shape_flag = 1;  break;
-        case GBA_OBJ_64_32: size_flag = 3; shape_flag = 1;  break;
-        case GBA_OBJ_8_16:  size_flag = 0; shape_flag = 2;  break;
-        case GBA_OBJ_8_32:  size_flag = 1; shape_flag = 2;  break;
-        case GBA_OBJ_16_32: size_flag = 2; shape_flag = 2;  break;
-        case GBA_OBJ_32_64: size_flag = 3; shape_flag = 2;  break;
-    }
-
+    /*				size
+                0		1		2		3
+    shape	0	8x8		16x16	32x32	64x64
+            1	16x8	32x8	32x16	64x32
+            2	8x16	8x32	16x32	32x64
+    */
+    const uchar size_flag = (size_flags >> 4);
+    const uchar shape_flag = (size_flags & 0xF);
+    const uchar h_flip = 0, v_flip =0,  tile_offset =0;
     obj_attrs[obj_attr_index].attr0 =
                     (0)                          //8 bits for y value
                 |(0 << 8)                     //affine
@@ -636,7 +623,7 @@ int gba_obj_new(gba_obj_size size, int priority)
                         tile_offset   // tile index 
                         |   (priority << 10) //priority 
                         |   (0 << 12);          // 16 color palette	
-	//return sprite struct with the given sprite attributess
+	
 	uint new_obj_attr_index = obj_attr_index;
     ++obj_attr_index;
     return new_obj_attr_index;

@@ -1,9 +1,8 @@
+// 138paulmiller libgbak
 #ifndef GBAK_H
 #define GBAK_H
 
-// TODO: Rename BG_Map to TileMap. Tileset to TileSheet 
 #include <stddef.h>
-
 typedef unsigned int uint;
 typedef unsigned long ulong;
 typedef unsigned short ushort;
@@ -16,7 +15,6 @@ Display Modes
     Mode 2: 2 available tiled backgrounds. Both can be rotated and scaled. 
     Mode 3: Bitmap mode
     Mode 4: Double buffered draw mode with palette colors (pixels are 1 btye) uses gba_swap_buffer to refresh.
-
 
     Mode:	BG0 	BG1 	BG2 	BG3
     -----------------------------------
@@ -41,10 +39,29 @@ Display Modes
 #define GBA_BUTTON_R (1 << 8)
 #define GBA_BUTTON_L (1 << 9)
 
+#define GBA_OBJ_8_8   0x00
+#define GBA_OBJ_16_16 0x10
+#define GBA_OBJ_32_32 0x20
+#define GBA_OBJ_64_64 0x30
+#define GBA_OBJ_16_8  0x01
+#define GBA_OBJ_32_8  0x11
+#define GBA_OBJ_32_16 0x21
+#define GBA_OBJ_64_32 0x31
+#define GBA_OBJ_8_16  0x02
+#define GBA_OBJ_8_32  0x12
+#define GBA_OBJ_16_32 0x22
+#define GBA_OBJ_32_64 0x32
+
+// Max number of objects
+#define GBA_OBJ_COUNT 128
+// Invalid object index
+#define GBA_OBJ_INVALID -1
+
 // Max number of backgrounds
 #define GBA_BG_COUNT 4
 
-#define GBA_COLOR_MODE 1 //256 colors
+// color palette mode
+#define GBA_COLOR_MODE 1 
 
 // Max number of colors in palette block
 #define GBA_PALETTE_COUNT 256
@@ -78,12 +95,12 @@ void gba_wait(uint sec);
 // Checks whether a particular button has been pressed. Returns 0 if not
 uchar gba_button_state(ushort button);
 
-/*-------------------------Immediate Modes (3 and 4) --------------------------------------*/
+//====================== Modes 3 API =======================================//
 
-// Mode 3
 void gba_pixel(int x, int y, uchar r, uchar g, uchar b);
 
-// Mode 4 (Buffered screen. Prevent tearing)
+//====================== Modes 4 API =======================================//
+
 void gba_clear_palette();
 uchar gba_add_color(uchar r, uchar g, uchar b);
 void gba_set_color(int x, int y, uchar color_index);
@@ -92,10 +109,14 @@ void gba_clear_screen(uchar color);
 void gba_refresh_screen();
 void gba_draw_rect(uchar x, uchar y, uchar w, uchar h, uchar  color_index); 
 
-/* ---------------------- Tiled Background ------------------------------*/
+//====================== Modes 0, 1, and 2 API =============================//
 
+//---------------------- Background API ------------------------------------//
+
+// Configure the hardware to read char and screen block data for the given bg  
 void gba_bg_init(uchar bg_index, uint char_block_n, uint screen_block_n, ushort size, ushort priority, ushort wrap);
 
+// Reset all background configs
 void gba_bg_reset();
 
 // Load background palette colors
@@ -110,31 +131,7 @@ void gba_bg_tilemap(uint screen_block_n, const ushort* tilemap_data, uint width,
 // Load background palette colors
 void gba_bg_scroll(int bg_index, int offset_x, int offset_y);
 
-/* ---------------------- Tiled Objects (Sprites) ------------------------------*/
-/*				size
-			0		1		2		3
-shape	0	8x8		16x16	32x32	64x64
-		1	16x8	32x8	32x16	64x32
-		2	8x16	8x32	16x32	32x64
-*/
-
-typedef enum gba_obj_size 
-{
-    GBA_OBJ_8_8,
-    GBA_OBJ_16_16,
-    GBA_OBJ_32_32,
-    GBA_OBJ_64_64,
-    GBA_OBJ_16_8,
-    GBA_OBJ_32_8,
-    GBA_OBJ_32_16,
-    GBA_OBJ_64_32,
-    GBA_OBJ_8_16,
-    GBA_OBJ_8_32,
-    GBA_OBJ_16_32,
-    GBA_OBJ_32_64
-} gba_obj_size;
-#define GBA_OBJ_COUNT 128
-#define GBA_OBJ_INVALID -1
+//----------------------- Object API ----------------------------------------//
 
 //load the palette into the sprite palette memory block 
 void gba_obj_palette(const ushort* palette_data);
@@ -144,7 +141,10 @@ void gba_obj_image(const uchar* image_data, uint width, uint height);
 
 //load the sprite object data into the sprite object memory block 
 void gba_obj_data(const ushort* obj_data, uint size);
-int gba_obj_new(gba_obj_size size, int priority);
+
+// Create a new sprite
+// size_flags = GBA_OBJ_N_M 
+int gba_obj_new(uchar sizeshape, int priority);
 uchar gba_obj_width(uint object_index);
 void gba_obj_set_pos(uint object_index, int x, int y) ;
 void gba_obj_get_pos(uint object_index, int *x, int *y);
@@ -154,7 +154,24 @@ void gba_obj_flip(uint object_index, int h_flip, int v_flip);
 void gba_obj_reset_all();
 void gba_obj_update_all();
 
-/* ---------------------- Memory and Utilities ------------------------------*/
+//----------------------- Memory API ----------------------------------------//
+
+// Copy arrays using GBA DMA hardware 
+void gba_copy16(ushort* dest, const ushort* source, ushort size) ;
+void gba_copy32(uint* dest, const uint* source, ushort size);
+
+// Fill array using GBA DMA hardware 
+void gba_fill16(ushort* dest, const ushort* source, ushort count);
+void gba_fill32(uint* dest, const uint* source, ushort count);
+
+// VRAM-safe Copy arrays using GBA DMA hardware 
+// note: will copy source on next vram refresh. So must ensure will not change until then
+void gba_vram_copy16(ushort* dest, const ushort* source, ushort size) ;
+void gba_vram_copy32(uint* dest, const uint* source, ushort size);
+
+// VRAM-safe Fill array using GBA DMA hardware 
+void gba_vram_fill16(ushort* dest, const ushort source, ushort count);
+void gba_vram_fill32(uint* dest, const uint source, ushort count);
 
 /* 
 Screen and Character blocks (memory representation of vram ) 
@@ -188,23 +205,5 @@ ushort* gba_char_block(unsigned long block_n);
 ushort* gba_screen_block(unsigned long block_n);
 unsigned long gba_char_block_offset(ushort* block);
 unsigned long gba_screen_block_offset(ushort* block);
-
-// Copy arrays using GBA DMA hardware 
-void gba_copy16(ushort* dest, const ushort* source, ushort size) ;
-void gba_copy32(uint* dest, const uint* source, ushort size);
-
-// Fill array using GBA DMA hardware 
-void gba_fill16(ushort* dest, const ushort* source, ushort count);
-void gba_fill32(uint* dest, const uint* source, ushort count);
-
-// VRAM-safe Copy arrays using GBA DMA hardware 
-// note: will copy source on next vram refresh. So must ensure will not change until then
-void gba_vram_copy16(ushort* dest, const ushort* source, ushort size) ;
-void gba_vram_copy32(uint* dest, const uint* source, ushort size);
-
-// VRAM-safe Fill array using GBA DMA hardware 
-void gba_vram_fill16(ushort* dest, const ushort source, ushort count);
-void gba_vram_fill32(uint* dest, const uint source, ushort count);
-
 
 #endif //GBAK_H
