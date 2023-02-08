@@ -311,24 +311,52 @@ void gba_vsync( )
 	while (*scan_vcount < 160) {}
 }
 
-void gba_wait(uint sec)
+
+void gba_wait(uint cycles)
+{
+	volatile ushort* timer2			= (volatile ushort*)0x04000108;
+	volatile ushort* timer2_control	= (volatile ushort*)0x0400010A;
+	volatile ushort* timer3			= (volatile ushort*)0x0400010C;
+	volatile ushort* timer3_control	= (volatile ushort*)0x0400010E;
+
+	*timer3= -1;
+	*timer2= -0x3000;  // 0x3000 ticks till overflow (incrementing timer 3)
+	*timer2_control = TIMER_ENABLE | TIMER_FREQ_1024;   // we're using the 1024 cycle timer
+	*timer3_control= TIMER_ENABLE | TIMER_CASCADE;
+
+	uint counter_cycles = 0;
+    while(1)
+	{
+		gba_vsync();
+        counter_cycles++;
+        if(counter_cycles >= cycles)
+        {
+            return;
+        }
+        *timer2= -0x3000;          // 0x3000 ticks till overflow
+        *timer2_control = TIMER_ENABLE | TIMER_FREQ_1024;
+        *timer3_control = TIMER_ENABLE | TIMER_CASCADE;
+	}
+}
+
+void gba_wait_sec(uint sec)
 {
 	*timer2= -0x3000;  // 0x3000 ticks till overflow (incrementing timer 3)
 	*timer2_control = TIMER_ENABLE | TIMER_FREQ_1024;   // we're using the 1024 cycle timer
 	*timer3_control= TIMER_ENABLE | TIMER_CASCADE;
 
-	uint cycles = 0;
+	uint counter_cycles = 0;
 	while(1)
 	{
 		gba_vsync();
 		if(*timer3 != -1)
 		{
-			cycles++;
-			if((cycles / 60) >= sec)
+			counter_cycles++;
+			if((counter_cycles / 60) >= sec)
 			{
 				return;
 			}
-            *timer2= -0x3000;          // 0x4000 ticks till overflow
+            *timer2= -0x3000;          // 0x3000 ticks till overflow
 			*timer2_control = TIMER_ENABLE | TIMER_FREQ_1024;
             *timer3_control = TIMER_ENABLE | TIMER_CASCADE;
 		}

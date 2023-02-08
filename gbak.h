@@ -106,7 +106,8 @@ void gba_reset();
 
 // wait for the screen to be in vblank
 void gba_vsync();
-void gba_wait(uint sec);
+void gba_wait(uint cycles);
+void gba_wait_sec(uint sec);
 
 // Checks whether a particular button has been pressed. Returns 0 if not
 uchar gba_button_state(ushort button);
